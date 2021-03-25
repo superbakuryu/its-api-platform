@@ -18,24 +18,27 @@ app = FastAPI()
 db_user = [
     {
         "id": 0,
-        "username": "admin",
+        "name": "admin",
         "email": "string",
         "password": "$2b$12$yffGYlhHbkBrpgkmAJxSs.sVjH17bEWRCHfeI4DEiiswmMmKa6vdC",
-        "active": 1
+        "active": 1,
+        "api_key": "admin"
     },
     {
         "id": 1,
-        "username": "1",
+        "name": "1",
         "email": "string",
         "password": "$2b$12$rMm2bUjYfx9huezJW3JVbuNPpFaV5DItvHeuu/sUsgpi.2OOM.Z8S",
-        "active": 1
+        "active": 1,
+        "api_key": "key"
     },
     {
         "id": 2,
-        "username": "2",
+        "name": "2",
         "email": "string",
         "password": "$2b$12$i1VISKlCZA73JMyOUa1qCegTE06TMb.nReRL29FGcnP/5M52XEspS",
-        "active": 0
+        "active": 0,
+        "api_key": "key_inactive"
     }
 ]
 db_stt = [
@@ -124,7 +127,7 @@ db_voiceid = [
 # DATABASE
 class User(BaseModel):
     id: int
-    username: str
+    name: str
     email: str
     password: str
     active: int
@@ -158,10 +161,12 @@ class VoiceID(BaseModel):
     department: str
     tags: list
 
+
 class Service(BaseModel):
     service_id: int
     name: str
     price: int
+
 
 class Token(BaseModel):
     access_token: str
@@ -180,6 +185,13 @@ def get_voiceid(id):
         if element['user_id'] == id:
             return element
     return "Không có dữ liệu"
+
+
+def get_user(api_key):
+    for user in db_user:
+        if user['api_key'] == api_key:
+            return user
+    return None
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -219,7 +231,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
     for user in db_user:
-        if user['username'] == token_data.username:
+        if user['name'] == token_data.username:
             return user
     if user is None:
         raise credentials_exception
@@ -234,20 +246,23 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 @app.post("/token", response_model=Token, tags=['Authentication'])
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    for user in db_user:
-        if user['username'] == form_data.username and verify_password(form_data.password, user['password']):
-            access_token_expires = timedelta(
-                minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-            access_token = create_access_token(
-                data={"sub": user['username']}, expires_delta=access_token_expires)
-            return {"access_token": access_token, "token_type": "bearer"}
-            # return 'Pass'
-    return "Sai tài khoản hoặc mật khẩu"
+    user = get_user(form_data.username)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user['name']}, expires_delta=access_token_expires)
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.get("/", tags=["Home"])
 def read_root():
-    return {"key": "value"}
+    return {"Welcome": "ITS API Platform"}
 
 # USER
 
