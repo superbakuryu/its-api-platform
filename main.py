@@ -5,42 +5,23 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+from bson.objectid import ObjectId
 import uvicorn
+
+import pymongo
+
+myclient = pymongo.MongoClient("mongodb://localhost:27017/")
+mydb = myclient["mydatabase"]
 
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+NOW = datetime.today().strftime('%Y-%m-%d')
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
 
-db_user = [
-    {
-        "id": 0,
-        "name": "admin",
-        "email": "string",
-        "password": "$2b$12$yffGYlhHbkBrpgkmAJxSs.sVjH17bEWRCHfeI4DEiiswmMmKa6vdC",
-        "active": 1,
-        "api_key": "admin"
-    },
-    {
-        "id": 1,
-        "name": "1",
-        "email": "string",
-        "password": "$2b$12$rMm2bUjYfx9huezJW3JVbuNPpFaV5DItvHeuu/sUsgpi.2OOM.Z8S",
-        "active": 1,
-        "api_key": "key"
-    },
-    {
-        "id": 2,
-        "name": "2",
-        "email": "string",
-        "password": "$2b$12$i1VISKlCZA73JMyOUa1qCegTE06TMb.nReRL29FGcnP/5M52XEspS",
-        "active": 0,
-        "api_key": "key_inactive"
-    }
-]
 db_stt = [
     {
         "user_id": "1",
@@ -126,11 +107,16 @@ db_voiceid = [
 
 # DATABASE
 class User(BaseModel):
-    id: int
     name: str
+    avatar: str = "/static/img/undraw_profile.svg"
     email: str
-    password: str
+    phone: str
+    company: str
+    plan: str
     active: int
+    timestamp: str
+    password: str
+    # api_key: str
 
 
 class STT(BaseModel):
@@ -163,8 +149,9 @@ class VoiceID(BaseModel):
 
 
 class Service(BaseModel):
-    service_id: int
+    id: str
     name: str
+    description: str
     price: int
 
 
@@ -243,6 +230,36 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
     raise HTTPException(status_code=400, detail="Inactive user")
 # END FUNCTION
 
+# db_services = []
+
+# for x in db.db_services:
+#     db_services.append(x)
+# print((db_services))
+
+# SERVICE
+
+db_services = list(mydb.services.find({}, {'_id': 0}))
+db_user = list(mydb.merchants.find({}, {'_id': 0}))
+
+
+@app.get("/service", tags=['Service'])
+def show_service():
+    return db_services
+
+
+@app.post("/service", tags=['Service'])
+def create_service(request: Service):
+    insert_data = {
+        'name': request.name,
+        'description': request.description,
+        'price': request.price,
+        'update_at': NOW
+    }
+
+    mydb.services.insert_one(insert_data)
+    return request.dict()
+# Authentication
+
 
 @app.post("/token", response_model=Token, tags=['Authentication'])
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -273,18 +290,29 @@ def show_user(current_user: User = Depends(get_current_active_user)):
 
 
 @app.post("/user", tags=['User'])
-def create_user(request: User, current_user: User = Depends(get_current_active_user)):
-    request.password = get_password_hash(request.password)
-    db_user.append(request.dict())
+def create_user(request: User):
+    insert_data = {
+        "name": request.name,
+        "avatar": request.avatar,
+        "email": request.email,
+        "phone": request.phone,
+        "company": request.company,
+        "plan": request.plan,
+        "active": request.active,
+        "timestamp": request.timestamp,
+        "password": get_password_hash(request.password)
+        # "api_key": request.api_key
+    }
+    mydb.merchants.insert_one(insert_data)
     return request.dict()
 
 
-@app.get('/user/{id}', tags=['User'])
-def show_user(id: int, current_user: User = Depends(get_current_active_user)):
+@app.get('/user/{name}', tags=['User'])
+def show_user_by_name(name: str):
     for user in db_user:
-        if user['id'] == id:
+        if user.get("name")==name:
             return user
-    return "Không tồn tại người dùng này"
+    return "Không tìm thấy người dùng"
 
 
 # STTFILES
